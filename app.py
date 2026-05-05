@@ -3,35 +3,36 @@ import requests
 
 app = Flask(__name__)
 
-# --- CONFIGURAÇÕES FIXAS ---
+# --- CONFIGURAÇÕES ---
 API_URL = "https://evolution-api-production-23a02.up.railway.app"
 API_KEY = "03dfa2f521050f9d775d4893856245ef0444a9c57c676268e257166bbab09a35"
-INSTANCE_NAME = "SigmaWhatsApp"
+INSTANCE = "SigmaWhatsApp"
 
+# Aceita tanto /enviar quanto /sigma_whats para não ter erro
+@app.route('/enviar', methods=['POST', 'GET'])
 @app.route('/sigma_whats', methods=['POST', 'GET'])
-def sigma_whats():
-    # 1. Captura IMEDIATA dos dados da URL
-    cliente = request.args.get('cliente', 'Cliente Sigma')
-    evento = request.args.get('desc', 'Evento detectado')
-    telefone = request.args.get('tel', '5521991334576')
+def disparar():
+    # Pega os dados de onde vierem (URL ou Formulário)
+    cliente = request.args.get('cliente') or request.form.get('cliente') or "Cliente Sigma"
+    evento = request.args.get('desc') or request.form.get('desc') or "Alerta"
+    telefone = request.args.get('tel') or request.form.get('tel') or "5521991334576"
     
-    # 2. Limpeza do número
     num_limpo = ''.join(filter(str.isdigit, telefone))
     mensagem = f"🔔 *ALERTA SIGMA*\n\n👤 *Cliente:* {cliente}\n📝 *Evento:* {evento}"
 
-    # 3. Preparação do disparo
-    payload = {"number": num_limpo, "text": mensagem}
-    headers = {"apikey": API_KEY, "Content-Type": "application/json"}
-
     try:
-        # Enviamos para a API com um timeout curto para não travar seu PC
-        requests.post(f"{API_URL}/message/sendText/{INSTANCE_NAME}", 
-                      json=payload, headers=headers, timeout=2)
+        # Envio para a Evolution API
+        requests.post(
+            f"{API_URL}/message/sendText/{INSTANCE}", 
+            json={"number": num_limpo, "text": mensagem}, 
+            headers={"apikey": API_KEY}, 
+            timeout=5
+        )
     except Exception as e:
-        print(f"Log de envio: {e}")
+        print(f"Erro no disparo: {e}")
 
-    # 4. RESPOSTA FLASH (Isso aqui impede o erro no seu PowerShell)
-    return jsonify({"status": "recebido", "cliente": cliente}), 200
+    # Resposta rápida em JSON para o script local não travar
+    return jsonify({"status": "ok", "recebido": cliente}), 200
 
 @app.route('/')
 def home():
