@@ -10,33 +10,28 @@ INSTANCE_NAME = "SigmaWhatsApp"
 
 @app.route('/sigma_whats', methods=['POST', 'GET'])
 def sigma_whats():
-    # Tenta pegar os dados da URL (args) ou do formulário (form)
-    # Isso garante que o nome do Vilson seja capturado
-    cliente = request.args.get('cliente') or request.form.get('cliente') or "Cliente Sigma"
-    evento = request.args.get('desc') or request.form.get('desc') or "Evento detectado"
-    telefone = request.args.get('tel') or request.form.get('tel') or "5521991334576"
-
-    # Limpeza de segurança no telefone
-    num_limpo = ''.join(filter(str.isdigit, telefone))
+    # 1. Captura IMEDIATA dos dados da URL
+    cliente = request.args.get('cliente', 'Cliente Sigma')
+    evento = request.args.get('desc', 'Evento detectado')
+    telefone = request.args.get('tel', '5521991334576')
     
-    # Montagem da mensagem formatada
+    # 2. Limpeza do número
+    num_limpo = ''.join(filter(str.isdigit, telefone))
     mensagem = f"🔔 *ALERTA SIGMA*\n\n👤 *Cliente:* {cliente}\n📝 *Evento:* {evento}"
 
-    endpoint = f"{API_URL}/message/sendText/{INSTANCE_NAME}"
-    headers = {"apikey": API_KEY, "Content-Type": "application/json"}
+    # 3. Preparação do disparo
     payload = {"number": num_limpo, "text": mensagem}
+    headers = {"apikey": API_KEY, "Content-Type": "application/json"}
 
     try:
-        # Envia para o WhatsApp
-        res = requests.post(endpoint, json=payload, headers=headers)
-        
-        # RESPOSTA CRÍTICA: Retornamos um JSON puríssimo para o seu controle.py não travar
-        response = jsonify({"status": "sucesso", "cliente": cliente})
-        response.headers.add('Content-Type', 'application/json')
-        return response, 200
+        # Enviamos para a API com um timeout curto para não travar seu PC
+        requests.post(f"{API_URL}/message/sendText/{INSTANCE_NAME}", 
+                      json=payload, headers=headers, timeout=2)
     except Exception as e:
-        print(f"Erro interno: {str(e)}")
-        return jsonify({"status": "erro"}), 500
+        print(f"Log de envio: {e}")
+
+    # 4. RESPOSTA FLASH (Isso aqui impede o erro no seu PowerShell)
+    return jsonify({"status": "recebido", "cliente": cliente}), 200
 
 @app.route('/')
 def home():
