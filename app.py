@@ -14,25 +14,28 @@ def enviar():
     if not dados:
         return jsonify({"erro": "Nenhum dado recebido"}), 400
 
-    # Pega os dados que o seu controle.py local enviou
+    # Captura os dados vindos do seu controle.py local
     cliente = dados.get('cliente', 'Não informado')
-    desc = dados.get('desc', 'Evento não identificado')
+    desc_bruta = dados.get('desc', 'Evento não identificado')
     id_user = str(dados.get('id_user', '')).strip()
     nome_user = dados.get('nome_user', '').strip()
     tel_destino = dados.get('tel') or "5521991334576"
 
-    # --- LÓGICA DO USUÁRIO (O "Pulo do Gato") ---
-    # Prioridade 1: Nome do usuário se existir no cadastro
-    # Prioridade 2: ID da senha (ex: 02) se não tiver nome
-    # Prioridade 3: Se for comando via app/software, indica "Sistema"
+    # --- LÓGICA DE LIMPEZA DO EVENTO ---
+    # Remove o nome do usuário de dentro da descrição para não repetir
+    evento_limpo = desc_bruta
+    if nome_user and nome_user != "Não identificado":
+        if nome_user in desc_bruta:
+            # Remove o nome e limpa hifens ou espaços extras que sobram
+            evento_limpo = desc_bruta.replace(nome_user, "").replace(" - ", " ").replace("  ", " ").strip()
     
+    # --- LÓGICA DO USUÁRIO ---
     usuario_final = "Sistema"
-    
     if nome_user and nome_user != "Não identificado":
         usuario_final = nome_user
-    elif id_user and id_user != "0":
+    elif id_user and id_user != "0" and id_user != "":
         usuario_final = f"Senha {id_user}"
-    elif "REMOTAMENTE" in desc.upper():
+    elif "REMOTAMENTE" in desc_bruta.upper():
         usuario_final = "Comando Remoto"
 
     # Limpa o telefone para a Evolution API
@@ -42,8 +45,8 @@ def enviar():
     mensagem = (
         f"🔔 *ALERTA TELESEGURANÇA*\n\n"
         f"👤 *Cliente:* {cliente}\n"
-        f"📝 *Evento:* {desc}\n"
-        f"🔑 *Usuário:* {usuario_final}"
+        f"📝 *Evento:* {evento_limpo.upper()}\n"
+        f"🔑 *Usuário:* {usuario_final.upper()}"
     )
 
     endpoint = f"{API_URL}/message/sendText/{INSTANCE_NAME}"
