@@ -10,32 +10,48 @@ INSTANCE_NAME = "SigmaWhatsApp"
 
 @app.route('/enviar', methods=['POST'])
 def enviar():
-    # Captura o JSON 'pacote' que vem do seu controle.py
     dados = request.get_json(silent=True)
-    
     if not dados:
-        return jsonify({"erro": "Nenhum dado recebido"}), 400
+        return jsonify({"erro": "Sem dados"}), 400
 
-    # Pega as informações exatamente com os nomes que estão no seu script local
     cliente = dados.get('cliente', 'Cliente não identificado')
-    desc = dados.get('desc', 'Sem descrição')
-    quem = dados.get('quem', 'Não informado')
+    desc_bruta = dados.get('desc', 'Evento não identificado')
+    quem_bruto = dados.get('quem', '').strip()
     tel_destino = dados.get('tel') or "5521991334576"
 
-    # Limpa o telefone
+    # Lógica para desembolar Usuário e Evento
+    # Se o evento contiver "POR" ou "USUÁRIO", tentamos separar as informações
+    evento = desc_bruta
+    usuario = quem_bruto if quem_bruto and quem_bruto != "Não identificado" else "Não identificado"
+
+    if " - " in desc_bruta:
+        partes = desc_bruta.split(" - ", 1)
+        evento = partes[0]
+        if usuario == "Não identificado":
+            usuario = partes[1]
+    elif " PELO USUÁRIO - " in desc_bruta:
+        partes = desc_bruta.split(" PELO USUÁRIO - ", 1)
+        evento = partes[0]
+        if usuario == "Não identificado":
+            usuario = partes[1]
+
     num_limpo = ''.join(filter(str.isdigit, str(tel_destino)))
     
-    # Formata a mensagem com o "Quem" (quem armou/desarmou) para ficar mais completo
-    mensagem = f"🔔 *ALERTA SIGMA*\n\n👤 *Cliente:* {cliente}\n📝 *Evento:* {desc}\n🔑 *Usuário:* {quem}"
+    # Mensagem formatada e organizada
+    mensagem = (
+        f"🔔 *ALERTA SIGMA*\n\n"
+        f"👤 *Cliente:* {cliente}\n"
+        f"📝 *Evento:* {evento}\n"
+        f"🔑 *Usuário:* {usuario}"
+    )
 
-    # Disparo para a API Evolution
     endpoint = f"{API_URL}/message/sendText/{INSTANCE_NAME}"
     headers = {"apikey": API_KEY, "Content-Type": "application/json"}
     payload = {"number": num_limpo, "text": mensagem}
 
     try:
         res = requests.post(endpoint, json=payload, headers=headers)
-        return jsonify({"status": "sucesso", "whatsapp": res.status_code}), 200
+        return jsonify({"status": "sucesso"}), 200
     except Exception as e:
         return jsonify({"status": "erro", "detalhes": str(e)}), 500
 
