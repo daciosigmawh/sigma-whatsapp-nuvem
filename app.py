@@ -13,20 +13,31 @@ INSTANCE_NAME = "shomer"
 # Seu número de WhatsApp configurado para receber os alertas
 DESTINATION_NUMBER = "552121022109"
 
-@app.route('/webhook', methods=['POST'])
+# Rota corrigida para bater com o envio do Sigma (/sigma_whats)
+@app.route('/sigma_whats', methods=['POST'])
 def webhook():
     try:
         dados = request.get_json(force=True, silent=True)
         if not dados:
-            print("⚠️ Requisição recebida sem dados JSON válidos.")
-            return jsonify({"status": "error", "message": "Invalid JSON"}), 400
+            # Caso os dados venham como parâmetros na URL (Query Parameters)
+            dados = request.args.to_dict()
+            
+        if not dados:
+            print("⚠️ Requisição recebida sem dados válidos.")
+            return jsonify({"status": "error", "message": "No data found"}), 400
 
         # Captura a mensagem bruta vinda do Sigma
-        mensagem_bruta = dados.get("msg", "") or dados.get("mensagem", "")
+        mensagem_bruta = dados.get("msg", "") or dados.get("mensagem", "") or dados.get("desc", "")
         
+        # Se mesmo assim não achar, tenta montar uma string com o cliente e a descrição recebidos na URL
+        if not mensagem_bruta and "cliente" in dados:
+            cliente = dados.get("cliente", "")
+            desc = dados.get("desc", "")
+            mensagem_bruta = f"Cliente: {cliente} - Evento: {desc}"
+
         if not mensagem_bruta:
-            print(f"⚠️ Nenhuma mensagem encontrada nos dados: {dados}")
-            return jsonify({"status": "error", "message": "No message field found"}), 400
+            print(f"⚠️ Nenhuma mensagem estruturada encontrada nos dados: {dados}")
+            return jsonify({"status": "error", "message": "No message content found"}), 400
 
         print(f"🚀 EVENTO RECEBIDO DO SIGMA NA NUVEM: {mensagem_bruta}")
 
