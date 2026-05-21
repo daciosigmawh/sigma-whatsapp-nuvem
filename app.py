@@ -19,7 +19,6 @@ def webhook():
     try:
         dados = request.get_json(force=True, silent=True)
         if not dados:
-            # Caso os dados venham como parâmetros na URL (Query Parameters)
             dados = request.args.to_dict()
             
         if not dados:
@@ -29,7 +28,6 @@ def webhook():
         # Captura a mensagem bruta vinda do Sigma
         mensagem_bruta = dados.get("msg", "") or dados.get("mensagem", "") or dados.get("desc", "")
         
-        # Se mesmo assim não achar, tenta montar uma string com o cliente e a descrição recebidos na URL
         if not mensagem_bruta and "cliente" in dados:
             cliente = dados.get("cliente", "")
             desc = dados.get("desc", "")
@@ -41,13 +39,13 @@ def webhook():
 
         print(f"🚀 EVENTO RECEBIDO DO SIGMA NA NUVEM: {mensagem_bruta}")
 
-        # Monta o cabeçalho de autenticação para a Evolution API
+        # Monta o cabeçalho de autenticação
         headers = {
             "Content-Type": "application/json",
             "apikey": EVOLUTION_API_KEY
         }
 
-        # Monta o corpo da requisição exatamente como a Evolution exige
+        # Monta o payload ajustado para a rota v2 da Evolution API
         payload = {
             "number": DESTINATION_NUMBER,
             "options": {
@@ -60,12 +58,20 @@ def webhook():
             }
         }
 
-        # Constrói a URL de envio apontando para a instância correta (shomer)
-        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText/{INSTANCE_NAME}"
+        # CORREÇÃO DA ROTA V2: O nome da instância entra como parâmetro na URL (?instance=nome)
+        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText?instance={INSTANCE_NAME}"
 
         # Faz o repasse para a Evolution API
         resposta = requests.post(url_envio, json=payload, headers=headers, timeout=15)
         print(f"📡 Repassado para Evolution API: Status {resposta.status_code}")
+
+        # Se a rota com parâmetro ainda falhar, tenta o formato alternativo com a instância no cabeçalho/payload
+        if resposta.status_code == 404:
+            print("🔄 Tentando rota alternativa v2...")
+            url_envio_alt = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText"
+            payload["instance"] = INSTANCE_NAME
+            resposta = requests.post(url_envio_alt, json=payload, headers=headers, timeout=15)
+            print(f"📡 Repassado para Evolution API (Alternativa): Status {resposta.status_code}")
 
         return jsonify({
             "status": "success",
