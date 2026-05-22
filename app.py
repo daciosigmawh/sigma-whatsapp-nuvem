@@ -1,76 +1,84 @@
-import os
-import requests
 from flask import Flask, request, jsonify
+import requests
+import re
 
 app = Flask(__name__)
 
-# Configurações oficiais da sua Evolution API no Render
-EVOLUTION_API_URL = "https://evolution-api-shomer.onrender.com"
-EVOLUTION_API_KEY = "03dfa2f521050f9d775d4893856245ef0444a9c57c676268e257166bbab09a35"
+# CONFIGURAÇÕES DA EVOLUTION API V2 NO RENDER
+EVOLUTION_URL = "https://evolution-api-shomer.onrender.com/message/sendText/shomer"
+API_KEY = "03dfa2f521050f9d775d4893856245ef0444a9c57c676268e257166bbab09a35"
 
-# Dados de destino corretos
-INSTANCE_NAME = "shomer"
-DESTINATION_NUMBER = "552121022109"
+def limpar_numero(numero):
+    if not numero:
+        return ""
+    # Remove tudo o que não for número
+    num_limpo = re.sub(r'\D', '', str(numero))
+    return num_limpo
 
-@app.route('/sigma_whats', methods=['POST'])
-def webhook():
+@app.route('/', methods=['GET'])
+def home():
+    return "Servidor de Alertas Sigma Online", 200
+
+@app.route('/enviar', methods=['POST'])
+def receber_e_disparar():
+    dados = request.get_json()
+    
+    if not dados:
+        return jsonify({"error": "Nenhum dado recebido"}), 400
+
+    # Extrai as tags enviadas pelo gateway local
+    tel_original = dados.get('tel', '')
+    cliente = dados.get('cliente', '')
+    desc = dados.get('desc', '')
+    nome_user = dados.get('nome_user', '')
+
+    # TRATAMENTO E REGRA DO TELEFONE RESERVA
+    numero_limpo = limpar_numero(tel_original)
+    
+    if not numero_limpo:
+        # Se estiver vazio ou nulo, envia APENAS para o número reserva
+        numero_destino = "5521991334576"
+    else:
+        # Se tiver número, garante o código do país (55)
+        if not numero_limpo.startswith("55"):
+            numero_destino = f"55{numero_limpo}"
+        else:
+            numero_destino = numero_limpo
+
+    # MONTAGEM DA MENSAGEM COM O VISUAL IDENTICO AO PRINT
+    mensagem_formatada = (
+        "🔔 *ALERTA TELESEGURANÇA*\n\n"
+        "👤 *Cliente:* {cliente}\n"
+        "📝 *Evento:* {desc}\n"
+        "🔑 *Usuário:* {nome_user}"
+    ).format(cliente=cliente, desc=desc, nome_user=nome_user)
+
+    # MONTA O PAYLOAD PARA A EVOLUTION API V2
+    headers = {
+        "apikey": API_KEY,
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "number": numero_destino,
+        "text": mensagem_formatada
+    }
+
     try:
-        dados = request.get_json(force=True, silent=True)
-        if not dados:
-            dados = request.args.to_dict()
-            
-        if not dados:
-            print("⚠️ Requisição recebida sem dados válidos.")
-            return jsonify({"status": "error", "message": "No data found"}), 400
-
-        # Captura a mensagem tratando as variações do Sigma
-        mensagem_bruta = dados.get("msg", "") or dados.get("mensagem", "") or dados.get("desc", "")
+        # Envia para a instância do WhatsApp rodando na nuvem
+        resposta = requests.post(EVOLUTION_URL, json=payload, headers=headers, timeout=10)
         
-        if not mensagem_bruta and "cliente" in dados:
-            cliente = dados.get("cliente", "")
-            desc = dados.get("desc", "")
-            mensagem_bruta = f"Cliente: {cliente} - Evento: {desc}"
-
-        if not mensagem_bruta:
-            print(f"⚠️ Nenhuma mensagem estruturada encontrada nos dados: {dados}")
-            return jsonify({"status": "error", "message": "No message content found"}), 400
-
-        print(f"🚀 EVENTO RECEBIDO DO SIGMA NA NUVEM: {mensagem_bruta}")
-
-        # Na v2 com a rota tradicional, passamos a apikey no header
-        headers = {
-            "Content-Type": "application/json",
-            "apikey": EVOLUTION_API_KEY
-        }
-
-        # Payload padrão estruturado para a rota sendText da v2
-        payload = {
-            "number": DESTINATION_NUMBER,
-            "text": mensagem_bruta,
-            "options": {
-                "delay": 1200,
-                "presence": "composing",
-                "linkPreview": False
-            }
-        }
-
-        # Rota oficial da v2 com a instância na URL (que acabamos de recriar)
-        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText/{INSTANCE_NAME}"
-
-        resposta = requests.post(url_envio, json=payload, headers=headers, timeout=15)
-        print(f"📡 Repassado para Evolution v2 no Render: Status {resposta.status_code}")
-        print(f"📝 Resposta da API: {resposta.text}")
-
-        return jsonify({
-            "status": "success",
-            "sigma_received": True,
-            "evolution_status": resposta.status_code
-        }), 200
+        if response.status_code in [200, 201]:
+            print(f"✅ Alerta enviado com sucesso para {numero_destino}")
+            return jsonify({"status": "sucesso", "destino": numero_destino}), 200
+        else:
+            print(f"❌ Erro na Evolution API: {resposta.status_code} - {resposta.text}")
+            return jsonify({"status": "erro_api", "detalhes": resposta.text}), response.status_code
 
     except Exception as e:
-        print(f"❌ Erro crítico no processamento do webhook: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print(f"💥 Falha catastrófica ao conectar na Evolution: {e}")
+        return jsonify({"status": "erro_conexao", "mensagem": str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    # Roda na porta padrão do Render
+    app.run(host='0.0.0.0', port=10000)
