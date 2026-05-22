@@ -4,13 +4,12 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# URL correta da sua Evolution API hospedada no Railway
-EVOLUTION_API_URL = "https://evolution-api-production-23a0.up.railway.app"
-# Sua chave global de autenticação
+# URL e chaves corretas da sua NOVA Evolution API no Render
+EVOLUTION_API_URL = "https://evolution-api-shomer.onrender.com"
 EVOLUTION_API_KEY = "03dfa2f521050f9d775d4893856245ef0444a9c57c676268e257166bbab09a35"
 
-# Nome exato da instância que está ativa no seu painel do Railway
-INSTANCE_NAME = "SigmaWhatsApp"
+# Nome real da instância na sua Evolution do Render
+INSTANCE_NAME = "shomer"
 # Seu número de WhatsApp que vai receber os alertas
 DESTINATION_NUMBER = "552121022109"
 
@@ -44,23 +43,20 @@ def webhook():
             "apikey": EVOLUTION_API_KEY
         }
 
+        # Payload no formato exato exigido pela Evolution v2
         payload = {
             "number": DESTINATION_NUMBER,
-            "options": {
-                "delay": 1200,
-                "presence": "composing",
-                "linkPreview": False
-            },
-            "textMessage": {
-                "text": mensagem_bruta
-            }
+            "text": mensagem_bruta,
+            "delay": 1200,
+            "presence": "composing"
         }
 
-        # Rota v1 apontando para a URL do Railway e para a instância SigmaWhatsApp
-        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText/{INSTANCE_NAME}"
+        # ROTA CORRETA DA V2 NO RENDER: /message/sendTextMessage/{instancia}
+        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendTextMessage/{INSTANCE_NAME}"
 
         resposta = requests.post(url_envio, json=payload, headers=headers, timeout=15)
-        print(f"📡 Repassado para Evolution API no Railway: Status {resposta.status_code}")
+        print(f"📡 Repassado para Evolution v2 no Render: Status {resposta.status_code}")
+        print(f"📝 Resposta da API: {resposta.text}")
 
         return jsonify({
             "status": "success",
