@@ -1,80 +1,64 @@
 from flask import Flask, request, jsonify
 import requests
-import re
 
 app = Flask(__name__)
 
-# CONFIGURAÇÕES DA EVOLUTION API V2 NO RENDER
-EVOLUTION_URL = "https://evolution-api-shomer.onrender.com/message/sendText/shomer"
+# --- CONFIGURAÇÕES ---
+API_URL = "https://evolution-api-production-23a02.up.railway.app"
 API_KEY = "03dfa2f521050f9d775d4893856245ef0444a9c57c676268e257166bbab09a35"
-
-def limpar_numero(numero):
-    if not numero:
-        return ""
-    return re.sub(r'\D', '', str(numero))
-
-@app.route('/', methods=['GET'])
-def home():
-    return "Servidor de Alertas Sigma Online", 200
+INSTANCE_NAME = "SigmaWhatsApp" 
 
 @app.route('/enviar', methods=['POST'])
-def receber_e_disparar():
-    dados = request.get_json()
-    
+def enviar():
+    dados = request.get_json(silent=True)
     if not dados:
-        return jsonify({"error": "Nenhum dado recebido"}), 400
+        return jsonify({"erro": "Nenhum dado recebido"}), 400
 
-    # Extrai exatamente as chaves que o teu controle.py envia
-    tel_original = dados.get('tel', '')
-    cliente = dados.get('cliente', '')
-    desc = dados.get('desc', '')
-    nome_user = dados.get('nome_user', '')
-    data_hora = dados.get('data', '')
+    # Pega os dados que o seu controle.py local enviou
+    cliente = dados.get('cliente', 'Não informado')
+    desc = dados.get('desc', 'Evento não identificado')
+    id_user = str(dados.get('id_user', '')).strip()
+    nome_user = dados.get('nome_user', '').strip()
+    tel_destino = dados.get('tel') or "5521991334576"
 
-    # TRATAMENTO E REGRA DO TELEFONE RESERVA
-    numero_limpo = limpar_numero(tel_original)
+    # --- LÓGICA DO USUÁRIO (O "Pulo do Gato") ---
+    # Prioridade 1: Nome do usuário se existir no cadastro
+    # Prioridade 2: ID da senha (ex: 02) se não tiver nome
+    # Prioridade 3: Se for comando via app/software, indica "Sistema"
     
-    if not numero_limpo:
-        numero_destino = "5521991334576"
-    else:
-        if not numero_limpo.startswith("55"):
-            numero_destino = f"55{numero_limpo}"
-        else:
-            numero_destino = numero_limpo
-
-    # MONTAGEM DA MENSAGEM IGUALZINHA AO TEU PRINT
-    mensagem_formatada = (
-        "🔔 *ALERTA TELESEGURANÇA*\n\n"
-        "👤 *Cliente:* {cliente}\n"
-        "📝 *Evento:* {desc}\n"
-        "🔑 *Usuário:* {nome_user}\n"
-        "📅 *Data/Hora:* {data}"
-    ).format(cliente=cliente, desc=desc, nome_user=nome_user, data=data_hora)
-
-    # ENVIO PARA A EVOLUTION
-    headers = {
-        "apikey": API_KEY,
-        "Content-Type": "application/json"
-    }
+    usuario_final = "Sistema"
     
-    payload = {
-        "number": numero_destino,
-        "text": mensagem_formatada
-    }
+    if nome_user and nome_user != "Não identificado":
+        usuario_final = nome_user
+    elif id_user and id_user != "0":
+        usuario_final = f"Senha {id_user}"
+    elif "REMOTAMENTE" in desc.upper():
+        usuario_final = "Comando Remoto"
+
+    # Limpa o telefone para a Evolution API
+    num_limpo = ''.join(filter(str.isdigit, str(tel_destino)))
+    
+    # MENSAGEM FORMATADA TELESEGURANÇA
+    mensagem = (
+        f"🔔 *ALERTA TELESEGURANÇA*\n\n"
+        f"👤 *Cliente:* {cliente}\n"
+        f"📝 *Evento:* {desc}\n"
+        f"🔑 *Usuário:* {usuario_final}"
+    )
+
+    endpoint = f"{API_URL}/message/sendText/{INSTANCE_NAME}"
+    headers = {"apikey": API_KEY, "Content-Type": "application/json"}
+    payload = {"number": num_limpo, "text": mensagem}
 
     try:
-        resposta = requests.post(EVOLUTION_URL, json=payload, headers=headers, timeout=10)
-        
-        if resposta.status_code in [200, 201]:
-            print(f"✅ Alerta enviado para {numero_destino}")
-            return jsonify({"status": "sucesso", "destino": numero_destino}), 200
-        else:
-            print(f"❌ Erro na Evolution API: {resposta.status_code} - {resposta.text}")
-            return jsonify({"status": "erro_api", "detalhes": resposta.text}), resposta.status_code
-
+        res = requests.post(endpoint, json=payload, headers=headers)
+        return jsonify({"status": "sucesso", "api_code": res.status_code}), 200
     except Exception as e:
-        print(f"💥 Falha ao conectar na Evolution: {e}")
-        return jsonify({"status": "erro_conexao", "mensagem": str(e)}), 500
+        return jsonify({"status": "erro", "detalhes": str(e)}), 500
+
+@app.route('/')
+def home():
+    return "🚀 API TELESEGURANÇA ONLINE!", 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
