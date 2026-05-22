@@ -8,70 +8,67 @@ app = Flask(__name__)
 EVOLUTION_API_URL = "https://evolution-api-shomer.onrender.com"
 EVOLUTION_API_KEY = "03dfa2f521050f9d775d4893856245ef0444a9c57c676268e257166bbab09a35"
 
-# Seus dados de destino
+# Dados de destino corretos
 INSTANCE_NAME = "shomer"
 DESTINATION_NUMBER = "552121022109"
 
 @app.route('/sigma_whats', methods=['POST'])
 def webhook():
     try:
-        dados = request.get_json(force=True, silent=True) or request.args.to_dict()
+        dados = request.get_json(force=True, silent=True)
+        if not dados:
+            dados = request.args.to_dict()
+            
+        if not dados:
+            print("⚠️ Requisição recebida sem dados válidos.")
+            return jsonify({"status": "error", "message": "No data found"}), 400
+
+        # Captura a mensagem tratando as variações do Sigma
         mensagem_bruta = dados.get("msg", "") or dados.get("mensagem", "") or dados.get("desc", "")
+        
         if not mensagem_bruta and "cliente" in dados:
-            mensagem_bruta = f"Cliente: {dados.get('cliente', '')} - Evento: {dados.get('desc', '')}"
+            cliente = dados.get("cliente", "")
+            desc = dados.get("desc", "")
+            mensagem_bruta = f"Cliente: {cliente} - Evento: {desc}"
+
         if not mensagem_bruta:
-            mensagem_bruta = "Teste de Alarme Sigma"
+            print(f"⚠️ Nenhuma mensagem estruturada encontrada nos dados: {dados}")
+            return jsonify({"status": "error", "message": "No message content found"}), 400
 
-        print(f"🚀 [MODO DIAGNÓSTICO v2] Iniciando testes para o evento: {mensagem_bruta}")
+        print(f"🚀 EVENTO RECEBIDO DO SIGMA NA NUVEM: {mensagem_bruta}")
 
+        # Na v2 com a rota tradicional, passamos a apikey no header
         headers = {
             "Content-Type": "application/json",
             "apikey": EVOLUTION_API_KEY
         }
 
-        # --- TESTE 0: Verificar se a instância 'shomer' realmente existe e está conectada ---
-        url_status = f"{EVOLUTION_API_URL.rstrip('/')}/instance/connectionState/{INSTANCE_NAME}"
-        try:
-            res_status = requests.get(url_status, headers=headers, timeout=10)
-            print(f"🔍 TESTE 0 (Status da Instância): URL: {url_status} | Status: {res_status.status_code} | Resposta: {res_status.text}")
-        except Exception as e:
-            print(f"❌ Falha ao tentar o TESTE 0: {str(e)}")
-
-        # Payload padrão para os testes de envio
+        # Payload padrão estruturado para a rota sendText da v2
         payload = {
             "number": DESTINATION_NUMBER,
             "text": mensagem_bruta,
-            "textMessage": {"text": mensagem_bruta},
-            "options": {"delay": 1200, "presence": "composing", "linkPreview": False}
+            "options": {
+                "delay": 1200,
+                "presence": "composing",
+                "linkPreview": False
+            }
         }
 
-        # --- TESTE 1: Rota tradicional v1/v2 com instância na URL ---
-        url_t1 = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText/{INSTANCE_NAME}"
-        res_t1 = requests.post(url_t1, json=payload, headers=headers, timeout=10)
-        print(f"🔍 TESTE 1 (sendText com Instância na URL): Status: {res_t1.status_code} | Resposta: {res_t1.text}")
+        # Rota oficial da v2 com a instância na URL (que acabamos de recriar)
+        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText/{INSTANCE_NAME}"
 
-        # --- TESTE 2: Rota sendTextMessage com instância na URL ---
-        url_t2 = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendTextMessage/{INSTANCE_NAME}"
-        res_t2 = requests.post(url_t2, json=payload, headers=headers, timeout=10)
-        print(f"🔍 TESTE 2 (sendTextMessage com Instância na URL): Status: {res_t2.status_code} | Resposta: {res_t2.text}")
-
-        # --- TESTE 3: Rota limpa mandando a instância no Header ---
-        url_t3 = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText"
-        headers_t3 = headers.copy()
-        headers_t3["instance"] = INSTANCE_NAME
-        res_t3 = requests.post(url_t3, json=payload, headers=headers_t3, timeout=10)
-        print(f"🔍 TESTE 3 (sendText limpo com Instância no Header): Status: {res_t3.status_code} | Resposta: {res_t3.text}")
+        resposta = requests.post(url_envio, json=payload, headers=headers, timeout=15)
+        print(f"📡 Repassado para Evolution v2 no Render: Status {resposta.status_code}")
+        print(f"📝 Resposta da API: {resposta.text}")
 
         return jsonify({
-            "status": "diagnostico_completo_executado",
-            "teste_0_status": res_status.status_code if 'res_status' in locals() else "falhou",
-            "teste_1_status": res_t1.status_code,
-            "teste_2_status": res_t2.status_code,
-            "teste_3_status": res_t3.status_code
+            "status": "success",
+            "sigma_received": True,
+            "evolution_status": resposta.status_code
         }), 200
 
     except Exception as e:
-        print(f"❌ Erro fatal no script de diagnóstico: {str(e)}")
+        print(f"❌ Erro crítico no processamento do webhook: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':
