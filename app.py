@@ -29,7 +29,7 @@ def receber_e_disparar():
     cliente = dados.get('cliente', '')
     desc = dados.get('desc', '')
     nome_user = dados.get('nome_user', '')
-    data_hora = dados.get('data', '') # <--- Corrigido para bater com o teu controle.py
+    data_hora = dados.get('data', '')
 
     # TRATAMENTO E REGRA DO TELEFONE RESERVA
     numero_limpo = limpar_numero(tel_original)
