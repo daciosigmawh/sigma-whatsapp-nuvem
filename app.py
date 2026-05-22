@@ -8,7 +8,7 @@ app = Flask(__name__)
 EVOLUTION_API_URL = "https://evolution-api-shomer.onrender.com"
 EVOLUTION_API_KEY = "03dfa2f521050f9d775d4893856245ef0444a9c57c676268e257166bbab09a35"
 
-# Dados de destino
+# Dados de destino corretos do Render
 INSTANCE_NAME = "shomer"
 DESTINATION_NUMBER = "552121022109"
 
@@ -23,10 +23,10 @@ def webhook():
             print("⚠️ Requisição recebida sem dados válidos.")
             return jsonify({"status": "error", "message": "No data found"}), 400
 
-        # Trata a mensagem vinda do Sigma
+        # Captura a mensagem tratando as variações do Sigma
         mensagem_bruta = dados.get("msg", "") or dados.get("mensagem", "") or dados.get("desc", "")
         
-        if not mensaje_bruta and "cliente" in dados:
+        if not mensagem_bruta and "cliente" in dados:
             cliente = dados.get("cliente", "")
             desc = dados.get("desc", "")
             mensagem_bruta = f"Cliente: {cliente} - Evento: {desc}"
@@ -37,23 +37,26 @@ def webhook():
 
         print(f"🚀 EVENTO RECEBIDO DO SIGMA NA NUVEM: {mensagem_bruta}")
 
-        # NA V2 A INSTÂNCIA VAI NO CABEÇALHO (headers)
+        # Configuração do cabeçalho exigida pela Evolution v2
         headers = {
             "Content-Type": "application/json",
             "apikey": EVOLUTION_API_KEY,
             "instance": INSTANCE_NAME
         }
 
-        # Corpo da requisição ajustado para a v2
+        # Corpo da requisição padrão para envio de texto na v2
         payload = {
             "number": DESTINATION_NUMBER,
             "text": mensagem_bruta,
-            "delay": 1200,
-            "presence": "composing"
+            "options": {
+                "delay": 1200,
+                "presence": "composing",
+                "linkPreview": False
+            }
         }
 
-        # URL correta e limpa para envio de texto na v2
-        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendTextMessage"
+        # URL limpa para a rota de texto na v2
+        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendText"
 
         resposta = requests.post(url_envio, json=payload, headers=headers, timeout=15)
         print(f"📡 Repassado para Evolution v2 no Render: Status {resposta.status_code}")
