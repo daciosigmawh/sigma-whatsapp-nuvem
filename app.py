@@ -4,13 +4,12 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# URL e chaves corretas da sua NOVA Evolution API no Render
+# Configurações oficiais da sua Evolution API no Render
 EVOLUTION_API_URL = "https://evolution-api-shomer.onrender.com"
 EVOLUTION_API_KEY = "03dfa2f521050f9d775d4893856245ef0444a9c57c676268e257166bbab09a35"
 
-# Nome real da instância na sua Evolution do Render
+# Dados de destino
 INSTANCE_NAME = "shomer"
-# Seu número de WhatsApp que vai receber os alertas
 DESTINATION_NUMBER = "552121022109"
 
 @app.route('/sigma_whats', methods=['POST'])
@@ -24,10 +23,10 @@ def webhook():
             print("⚠️ Requisição recebida sem dados válidos.")
             return jsonify({"status": "error", "message": "No data found"}), 400
 
-        # Captura a mensagem tratando as variações do Sigma
+        # Trata a mensagem vinda do Sigma
         mensagem_bruta = dados.get("msg", "") or dados.get("mensagem", "") or dados.get("desc", "")
         
-        if not mensagem_bruta and "cliente" in dados:
+        if not mensaje_bruta and "cliente" in dados:
             cliente = dados.get("cliente", "")
             desc = dados.get("desc", "")
             mensagem_bruta = f"Cliente: {cliente} - Evento: {desc}"
@@ -38,12 +37,14 @@ def webhook():
 
         print(f"🚀 EVENTO RECEBIDO DO SIGMA NA NUVEM: {mensagem_bruta}")
 
+        # NA V2 A INSTÂNCIA VAI NO CABEÇALHO (headers)
         headers = {
             "Content-Type": "application/json",
-            "apikey": EVOLUTION_API_KEY
+            "apikey": EVOLUTION_API_KEY,
+            "instance": INSTANCE_NAME
         }
 
-        # Payload no formato exato exigido pela Evolution v2
+        # Corpo da requisição ajustado para a v2
         payload = {
             "number": DESTINATION_NUMBER,
             "text": mensagem_bruta,
@@ -51,8 +52,8 @@ def webhook():
             "presence": "composing"
         }
 
-        # ROTA CORRETA DA V2 NO RENDER: /message/sendTextMessage/{instancia}
-        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendTextMessage/{INSTANCE_NAME}"
+        # URL correta e limpa para envio de texto na v2
+        url_envio = f"{EVOLUTION_API_URL.rstrip('/')}/message/sendTextMessage"
 
         resposta = requests.post(url_envio, json=payload, headers=headers, timeout=15)
         print(f"📡 Repassado para Evolution v2 no Render: Status {resposta.status_code}")
